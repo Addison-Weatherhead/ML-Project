@@ -231,3 +231,4 @@ for epoch in range(10001):
 
     optimizer.update_parameters([dense1, dense2])
 
+
