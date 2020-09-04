@@ -59,19 +59,66 @@ def get_data_from_acath_csv():
     testing_sigdz_labels = np.array(significant_coronary_disease_lables[round(len(samples)*0.8):])
     testing_tvdlm_labels = np.array(three_vessel_or_left_main_disease_labels[round(len(samples)*0.8):])
 
+    # normalizing the data
+    training_data = training_data/np.max(training_data, axis=0)
+    validation_data = validation_data/np.max(validation_data, axis=0)
+    testing_data = testing_data/np.max(testing_data, axis=0)
+
     train = (training_data, training_sigdz_lables, training_tvdlm_labels)
     validation = (validation_data, validation_sigdz_labels, validation_tvdlm_labels)
     test = (testing_data, testing_sigdz_labels, testing_tvdlm_labels)
 
     return [train, validation, test]
 
+
+def get_data_from_falldetection_csv():
+    lines = []
+    for line in open('falldetection.csv'):
+        line = (line.replace('\n', ''))
+        line = line.split(',')
+        lines.append(line)
+    column_names = lines.pop(0)
+    np.random.shuffle(lines)
+    labels = []
+    samples = []
+    for line in lines:
+        labels.append(int(line[0]))
+        samples.append([float(val) for val in line[1:]])
+
+    training_data = np.array(samples[0:int(len(samples) * 0.6)])
+    training_lables = np.array(labels[0:int(len(samples) * 0.6)])
+
+    validation_data = np.array(samples[round(len(samples) * 0.6):round(len(samples) * 0.8)])
+    validation_labels = np.array(labels[round(len(samples) * 0.6):round(len(samples) * 0.8)])
+
+    testing_data = np.array(samples[round(len(samples) * 0.8):])
+    testing_labels = np.array(samples[round(len(samples) * 0.8):])
+
+    # normalizing the data
+    training_data = training_data / np.max(training_data, axis=0)
+    validation_data = validation_data / np.max(validation_data, axis=0)
+    testing_data = testing_data / np.max(testing_data, axis=0)
+
+    train = (training_data, training_lables)
+    validation = (validation_data, validation_labels)
+    test = (testing_data, testing_labels)
+
+    return [train, validation, test]
+
+
 class DenseLayer:
-    def __init__(self, num_of_inputs, num_of_neurons):
+    def __init__(self, num_of_inputs, num_of_neurons, l2_weight_lambda=0.0,
+                 l2_bias_lambda=0.0):
         self.weights = 0.01 * np.random.randn(num_of_inputs, num_of_neurons)
         # The parameters of randn are just the dimensions of the matrix it makes
         self.biases = np.zeros((1, num_of_neurons))
         # creates a matrix of height 1 and length num_of_neurons filled with 0's
         self.output = None
+
+        # Factors used to penalize weights/biases of large magnitude. See the regularization_loss method in
+        # the CE loss class
+        self.l2_weight_lambda = l2_weight_lambda
+        self.l2_bias_lambda = l2_bias_lambda
 
     def forward(self, inputs):
         self.inputs = inputs
@@ -84,8 +131,13 @@ class DenseLayer:
 
         self.d_error__d_weights = np.dot(d_denselayer__d_weights,
                                          d_error__d_denselayer)
+        if self.l2_weight_lambda > 0:
+            self.d_error__d_weights += 2*self.l2_weight_lambda*self.weights
         self.d_error__d_biases = np.dot(d_denselayer__d_biases,
                                         d_error__d_denselayer)
+        if self.l2_bias_lambda > 0:
+            self.d_error__d_biases += 2*self.l2_bias_lambda*self.biases
+
         d_denselayer__d_input = self.weights.T
         self.d_error__d_inputs = np.dot(d_error__d_denselayer, d_denselayer__d_input)
 
@@ -209,6 +261,15 @@ class LossCategoricalCrossEntropy:
             self.d_error__d_inputs[sample_index][correct_output_class_for_this_sample] = \
                 -1/(self.network_output[sample_index][correct_output_class_for_this_sample] *
                     self.network_output.shape[0])
+
+    def l2_regularization(self, layer):
+        regularization_loss = 0
+        if layer.l2_weight_lambda > 0:
+            regularization_loss += layer.l2_weight_lambda * np.sum(layer.weights**2)
+        if layer.l2_bias_lambda > 0:
+            regularization_loss += layer.l2_bias_lambda * np.sum(layer.biases**2)
+
+        return regularization_loss
 
 
 class OptimizerVanillaSGD:
@@ -386,15 +447,22 @@ class OptimizerAdam:
 
 class ClassificationNeuralNetwork:
     def __init__(self, number_of_input_features, number_of_dense_layers, lengths_for_each_dense_layer,
-                 activation_layer_types, cost_function_type, number_of_output_nodes):
+                 activation_layer_types, cost_function_type, number_of_output_nodes, l2_weight_lambda,
+                 l2_bias_lambda):
         assert number_of_dense_layers == len(activation_layer_types)
         dense_layer_dimensions = [number_of_input_features] + lengths_for_each_dense_layer + \
                                  [number_of_output_nodes]
+
+        self.l2_weight_lambda = l2_weight_lambda
+        self.l2_bias_lambda = l2_bias_lambda
+
         self.dense_layer_objects = []
         for index in range(len(dense_layer_dimensions)):
             try:
                 self.dense_layer_objects.append(DenseLayer(dense_layer_dimensions[index],
-                                                      dense_layer_dimensions[index+1]))
+                                                      dense_layer_dimensions[index+1],
+                                                           l2_weight_lambda=self.l2_weight_lambda,
+                                                           l2_bias_lambda=self.l2_bias_lambda))
             except IndexError:
                 pass
 
@@ -415,14 +483,18 @@ class ClassificationNeuralNetwork:
         self.dense_layer_objects[0].forward(network_inputs)
         self.activation_layer_objects[0].forward(self.dense_layer_objects[0].output)
         current_output = self.activation_layer_objects[0].output
+        regularization_error = self.cost_function_object.l2_regularization(self.dense_layer_objects[0])
         for dense_layer_object, activation_layer_object in \
             zip(self.dense_layer_objects[1:], self.activation_layer_objects[1:]):
             dense_layer_object.forward(current_output)
             activation_layer_object.forward(dense_layer_object.output)
             current_output = activation_layer_object.output
+            regularization_error += self.cost_function_object.l2_regularization(dense_layer_object)
 
+        self.regularization_error = regularization_error
         self.cost_function_object.forward(current_output, correct_outputs)
-        self.error = self.cost_function_object.error
+        self.error = self.cost_function_object.error + regularization_error
+
         predictions = np.argmax(self.activation_layer_objects[-1].output, axis=1)
         self.accuracy = np.mean(predictions==correct_outputs)
 
@@ -444,7 +516,9 @@ class ClassificationNeuralNetwork:
 
 class Model:
     def __init__(self, number_of_layers, neuron_range, training_data, training_labels, validation_data,
-                 validation_labels, testing_data, testing_labels, number_of_outputs_nodes):
+                 validation_labels, testing_data, testing_labels, number_of_outputs_nodes,
+                 number_of_network_architectures, number_of_network_instances, momentum_range, rho_range,
+                 learning_rate_range, l2_weight_lambda, l2_bias_lambda):
         self.number_of_layers = number_of_layers
         self.neuron_range = neuron_range  # The range of the number of neurons per layer
         self.training_data = training_data
@@ -456,9 +530,16 @@ class Model:
         self.number_of_output_nodes = number_of_outputs_nodes
         self.neural_networks = []
         self.optimizer_objects = []
+        self.number_of_network_architectures = number_of_network_architectures
+        self.number_of_network_instances = number_of_network_instances
+        self.momentum_range = momentum_range
+        self.rho_range = rho_range
+        self.learning_rate_range = learning_rate_range
+        self.l2_weight_lambda = l2_weight_lambda
+        self.l2_bias_lambda = l2_bias_lambda
 
     def train(self):
-        for val in range(3):  # We will have 3 network architectures we try
+        for val in range(self.number_of_network_architectures):  # Trying multiple network architectures
             layer_lengths = list(np.random.randint(self.neuron_range[0], self.neuron_range[1],
                                                    self.number_of_layers-1))  # The last dense layer is output
             activation_layer_types = list(np.random.randint(0, 2, self.number_of_layers))
@@ -466,50 +547,80 @@ class Model:
             number_of_output_nodes = self.number_of_output_nodes
             number_of_input_features = self.training_data.shape[1]
 
-            for i in range(2):  # Creating 2 instances so we have multiple starting points parameter wise.
-                self.neural_networks.append(ClassificationNeuralNetwork(number_of_input_features,
-                                                                   self.number_of_layers,
-                                                                   layer_lengths, activation_layer_types,
-                                                                   cost_function_type,number_of_output_nodes))
-                if i % 2:
-                    self.optimizer_objects.append(OptimizerSGDWithMomentum(momentum=0.2))
-                elif i%2 == 1:
-                    self.optimizer_objects.append(OptimizerAdaGrad())
+            for i in range(self.number_of_network_instances):  # Creating multiple instances so we have
+                # multiple starting points parameter wise.
 
+                self.neural_networks.append(ClassificationNeuralNetwork(
+                    number_of_input_features=number_of_input_features,
+                    number_of_dense_layers=self.number_of_layers,
+                    lengths_for_each_dense_layer=layer_lengths, activation_layer_types=activation_layer_types,
+                    cost_function_type=cost_function_type, number_of_output_nodes=number_of_output_nodes,
+                    l2_bias_lambda=self.l2_bias_lambda, l2_weight_lambda=self.l2_weight_lambda))
+                if i % 3 == 0:
+                    self.optimizer_objects.append(OptimizerSGDWithMomentum(
+                        momentum=np.random.uniform(self.momentum_range[0], self.momentum_range[1]),
+                        learning_rate=np.random.uniform(self.learning_rate_range[0],
+                                                        self.learning_rate_range[1])))
+
+                elif i % 3 == 1:
+                    self.optimizer_objects.append(OptimizerAdaGrad(
+                        learning_rate=np.random.uniform(self.learning_rate_range[0],
+                                                        self.learning_rate_range[1])))
+                elif i % 3 == 2:
+                    self.optimizer_objects.append(OptimizerRMSProp(rho=np.random.uniform(self.rho_range[0],
+                                                                                         self.rho_range[1])))
+            print('number of networks: ', len(self.neural_networks))
+            print('number of optimizers: ', len(self.optimizer_objects))
         # Time to train!
         counter = 1
         for neural_network, optimizer in zip(self.neural_networks, self.optimizer_objects):
             print('Network: ', counter)
+
             for epoch in range(10001):
                 neural_network.forward_pass(self.training_data, self.training_labels)
                 neural_network.backward_pass()
                 optimizer.update_parameters(neural_network.dense_layer_objects)
 
                 if epoch % 100 == 0:
+                    max_weight = 0
+                    min_weight = 0
+                    max_bias = 0
+                    min_bias = 0
+                    for layer in neural_network.dense_layer_objects:
+                        if np.amax(layer.weights) > max_weight:
+                            max_weight = np.amax(layer.weights)
+                        if np.amin(layer.weights) < min_weight:
+                            min_weight = np.amin(layer.weights)
+
+                        if np.amax(layer.biases) > max_bias:
+                            max_bias = np.amax(layer.biases)
+                        if np.amin(layer.biases) < min_bias:
+                            min_bias = np.amin(layer.biases)
+
                     print(f'epoch: {epoch}, ' +
                           f'acc: {neural_network.accuracy:.3f}, ' +
                           f'loss: {neural_network.error:.3f}, ' +
-                          f'lr: {optimizer.current_learning_rate}')
-                    for index in range(len(neural_network.dense_layer_objects)):
-                        layer = neural_network.dense_layer_objects[index]
-                        print(f'Layer {index} max weight: {np.amax(layer.weights)}, ' +
-                        f'Layer {index} min weight: {np.amin(layer.weights):.3f}, ' +
-                        f'Layer {index} max bias: {np.amax(layer.biases):.3f}, ' +
-                        f'Layer {index} min bias: {np.amin(layer.biases)}')
+                          f'lr: {optimizer.current_learning_rate}' +
+                          f'weight range: {(min_weight, max_weight)}' +
+                          f'bias range: {(min_bias, max_bias)}')
+
             counter += 1
 
     def test(self):
         best_network = sorted(self.neural_networks, key=lambda network: network.accuracy)[0]
-        for network in self.neural_networks:
-            assert best_network.accuracy >= network
-        best_network.forward(self.testing_data, self.testing_labels)
+        print(sorted(self.neural_networks, key=lambda network: network.accuracy))
+
+        best_network.forward_pass(self.testing_data, self.testing_labels)
         print()
         print()
         print(f'The best network had an accuracy of {best_network.accuracy} and loss of {best_network.error}')
         print()
         print('The following is a loop through of all of the layers in this '
-              'network and the weights and biases')
+              'network, providing its size and the weights and biases')
         for layer in best_network.dense_layer_objects:
+            print('Number of inputs: ', layer.inputs.size[1])
+            print('Number of outputs: ', layer.outputs.size[1])
+            print()
             print('Weights:')
             print(layer.weights)
             print()
@@ -518,17 +629,19 @@ class Model:
             print()
 
 
-data = get_data_from_acath_csv()
-training_data, training_sigdz_labels = data[0][0], data[0][1].astype(int)
+data = get_data_from_falldetection_csv()
 
-validation_data, validation_sigdz_labels = data[1][0], data[1][1].astype(int)
+training_data, training_labels = data[0][0], data[0][1]
+validation_data, validation_labels = data[1][0], data[1][1]
+testing_data, testing_labels = data[2][0], data[2][1]
 
-testing_data, testing_sigdz_labels = data[2][0], data[2][1].astype(int)
-
-model = Model(number_of_layers=2, neuron_range=(10, 15), training_data=training_data,
-              training_labels=training_sigdz_labels, validation_data=validation_data,
-              validation_labels=validation_sigdz_labels,
-              testing_data=testing_data, testing_labels=testing_sigdz_labels, number_of_outputs_nodes=2)
+model = Model(number_of_layers=3, neuron_range=(28, 32), training_data=training_data,
+              training_labels=training_labels, validation_data=validation_data,
+              validation_labels=validation_labels,
+              testing_data=testing_data, testing_labels=testing_labels, number_of_outputs_nodes=6,
+              number_of_network_architectures=1, number_of_network_instances=3, momentum_range=(0.2, 0.4),
+              rho_range=(0.8, 0.95), learning_rate_range=(0.7, 0.9), l2_weight_lambda=5e-3,
+              l2_bias_lambda=5e-3)
 
 model.train()
 model.test()
