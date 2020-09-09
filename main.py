@@ -853,7 +853,7 @@ model.validate(num_of_dense_layers=3, activation_function_types=[0, 1, 2], num_o
 
 
 
-rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.005, epsilon=1e-7, rho=0.4)  # acc: 0.749, validation acc: 0.756
+rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.005, epsilon=1e-7, rho=0.4)  #acc: 0.749, validation acc: 0.756,  testing acc: 0.733
 
 model.validate(num_of_dense_layers=3, activation_function_types=[0, 0, 2], num_of_outputs=2,
                  layer_lengths=[64, 64], optimizer_object=rms_prop, cost_function_type=0,
