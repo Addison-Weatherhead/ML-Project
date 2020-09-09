@@ -4,6 +4,7 @@ from test import X, y  # Data set and labels used for testing purposes.
 #np.random.seed(0)
 np.set_printoptions(threshold=100000)
 
+
 def get_data_from_acath_csv():
     """
     Data found at: http://biostat.mc.vanderbilt.edu/wiki/Main/DataSets
@@ -15,7 +16,7 @@ def get_data_from_acath_csv():
 
 
     Outputs:
-    [(training_data, training_sigdz_lables, training_tvdlm_labels),
+    [(training_data, training_sigdz_labels, training_tvdlm_labels),
     (validation_data, validation_sigdz_labels, validation_tvdlm_labels),
     (testing_data, testing_sigdz_labels, testing_tvdlm_labels)]
 
@@ -30,7 +31,7 @@ def get_data_from_acath_csv():
     lines = lines[1:]
     np.random.shuffle(lines)  # shuffles the same way each time its run
     samples = []
-    significant_coronary_disease_lables = []
+    significant_coronary_disease_labels = []
     three_vessel_or_left_main_disease_labels = []
     for line in lines:
         if line[3] == '':
@@ -40,23 +41,23 @@ def get_data_from_acath_csv():
             # http://biostat.mc.vanderbilt.edu/wiki/pub/Main/DataSets/Cacath.html
             sample = [float(val) for val in line]  # Turning string values into actual floats
             samples.append(sample[0:4])  # Including sex, age, symptom duration, and cholesterol as features
-            significant_coronary_disease_lables.append(sample[4])
-            three_vessel_or_left_main_disease_labels.append(sample[5])
+            significant_coronary_disease_labels.append(int(sample[4]))
+            three_vessel_or_left_main_disease_labels.append(int(sample[5]))
 
     # Since the data has already been shuffled, we'll just take out the pieces we want for the data sets
 
     training_data = np.array(samples[0:int(len(samples)*0.6)])
-    training_sigdz_lables = np.array(significant_coronary_disease_lables[0:int(len(samples)*0.6)])
+    training_sigdz_labels = np.array(significant_coronary_disease_labels[0:int(len(samples)*0.6)])
     training_tvdlm_labels = np.array(three_vessel_or_left_main_disease_labels[0:int(len(samples)*0.6)])
 
     validation_data = np.array(samples[round(len(samples)*0.6):round(len(samples)*0.8)])
-    validation_sigdz_labels = np.array(significant_coronary_disease_lables
+    validation_sigdz_labels = np.array(significant_coronary_disease_labels
                                        [round(len(samples)*0.6):round(len(samples)*0.8)])
     validation_tvdlm_labels = np.array(three_vessel_or_left_main_disease_labels
                                        [round(len(samples)*0.6):round(len(samples)*0.8)])
 
     testing_data = np.array(samples[round(len(samples)*0.8):])
-    testing_sigdz_labels = np.array(significant_coronary_disease_lables[round(len(samples)*0.8):])
+    testing_sigdz_labels = np.array(significant_coronary_disease_labels[round(len(samples)*0.8):])
     testing_tvdlm_labels = np.array(three_vessel_or_left_main_disease_labels[round(len(samples)*0.8):])
 
     # normalizing the data
@@ -64,7 +65,7 @@ def get_data_from_acath_csv():
     validation_data = validation_data/np.max(validation_data, axis=0)
     testing_data = testing_data/np.max(testing_data, axis=0)
 
-    train = (training_data, training_sigdz_lables, training_tvdlm_labels)
+    train = (training_data, training_sigdz_labels, training_tvdlm_labels)
     validation = (validation_data, validation_sigdz_labels, validation_tvdlm_labels)
     test = (testing_data, testing_sigdz_labels, testing_tvdlm_labels)
 
@@ -72,6 +73,9 @@ def get_data_from_acath_csv():
 
 
 def get_data_from_falldetection_csv():
+    """
+    Data set found at https://www.kaggle.com/pitasr/falldata/version/1#
+    """
     lines = []
     for line in open('falldetection.csv'):
         line = (line.replace('\n', ''))
@@ -85,25 +89,99 @@ def get_data_from_falldetection_csv():
         labels.append(int(line[0]))
         samples.append([float(val) for val in line[1:]])
 
-    training_data = np.array(samples[0:int(len(samples) * 0.6)])
-    training_lables = np.array(labels[0:int(len(samples) * 0.6)])
+    all_data = [(label, sample) for label, sample in zip(labels, samples)]
+    organized_data = {}
+    for data_point in all_data:
+        if data_point[0] in organized_data:
+            organized_data[data_point[0]].append(data_point[1])
+        else:
+            organized_data[data_point[0]] = [data_point[1]]
 
-    validation_data = np.array(samples[round(len(samples) * 0.6):round(len(samples) * 0.8)])
-    validation_labels = np.array(labels[round(len(samples) * 0.6):round(len(samples) * 0.8)])
+    training_dict = {}
+    rest_dict = {}
+    for label in organized_data:
+        if label != 3:
+            training_dict[label] = organized_data[label][0:int(len(organized_data[3]) * 0.8/5)]
+            rest_dict[label] = organized_data[label][int(len(organized_data[3]) * 0.8/5):]
+    training_dict[3] = organized_data[3][0:int(len(organized_data[3]) * 0.8)]
+    rest_dict[3] = organized_data[3][int(len(organized_data[3]) * 0.8):]
 
-    testing_data = np.array(samples[round(len(samples) * 0.8):])
-    testing_labels = np.array(samples[round(len(samples) * 0.8):])
+
+
+    training_data_and_labels = []
+    rest_data_and_labels = []
+    for key in training_dict:
+        for sample in training_dict[key]:
+            if key == 3:
+                training_data_and_labels.append((1, sample))
+            else:
+                training_data_and_labels.append((0, sample))
+
+        for sample2 in rest_dict[key]:
+            if key == 3:
+                rest_data_and_labels.append((1, sample2))
+            else:
+                rest_data_and_labels.append((0, sample2))
+
+    np.random.shuffle(training_data_and_labels)
+    np.random.shuffle(rest_data_and_labels)
+    rest_data = [tup[1] for tup in rest_data_and_labels]
+    rest_labels = [tup[0] for tup in rest_data_and_labels]
+
+    training_data = np.array([tup[1] for tup in training_data_and_labels])
+    training_labels = np.array([tup[0] for tup in training_data_and_labels])
+
+    validation_data = np.array(rest_data[0:int(len(rest_data) * 0.3)])
+    validation_labels = np.array(rest_labels[0:int(len(rest_data) * 0.3)])
+
+    testing_data = np.array(rest_data[int(len(rest_data) * 0.3):])
+    testing_labels = np.array(rest_labels[int(len(rest_data) * 0.3):])
 
     # normalizing the data
-    training_data = training_data / np.max(training_data, axis=0)
-    validation_data = validation_data / np.max(validation_data, axis=0)
-    testing_data = testing_data / np.max(testing_data, axis=0)
+    #training_data = training_data / np.max(training_data, axis=0)
+    #validation_data = validation_data / np.max(validation_data, axis=0)
+    #testing_data = testing_data / np.max(testing_data, axis=0)
 
-    train = (training_data, training_lables)
+    train = (training_data, training_labels)
     validation = (validation_data, validation_labels)
     test = (testing_data, testing_labels)
 
     return [train, validation, test]
+
+
+def get_data_from_heart_failure_clinical_records_dataset_csv():
+    lines = []
+    for line in open('heart_failure_clinical_records_dataset.csv'):
+        lines.append(line.replace('\n', '').split(','))
+    lines.pop(0)
+    np.random.shuffle(lines)
+    samples = []
+    labels = []
+    for line in lines:
+        samples.append([float(val) for val in line[:-1]])
+        labels.append(int(line[-1]))
+
+    edited_samples = [sample[0:-1] for sample in samples]  # removes time
+    assert len(labels) == len(samples)
+    training_data = np.array(samples[0:int(len(samples)*0.7)])
+    training_labels = np.array(labels[0:int(len(samples)*0.7)])
+
+    validation_data = np.array(samples[int(len(samples)*0.7):int(len(samples)*0.8)])
+    validation_labels = np.array(labels[int(len(samples)*0.7):int(len(samples)*0.8)])
+
+    testing_data = np.array(samples[int(len(samples)*0.8):])
+    testing_labels = np.array(labels[int(len(samples)*0.8):])
+
+    training_data = training_data / np.max(training_data, axis=0)
+    validation_data = validation_data / np.max(validation_data, axis=0)
+    testing_data = testing_data / np.max(testing_data, axis=0)
+
+    train = (training_data, training_labels)
+    validate = (validation_data, validation_labels)
+    test = (testing_data, testing_labels)
+
+    return train, validate, test
+
 
 
 class DenseLayer:
@@ -449,6 +527,10 @@ class ClassificationNeuralNetwork:
     def __init__(self, number_of_input_features, number_of_dense_layers, lengths_for_each_dense_layer,
                  activation_layer_types, cost_function_type, number_of_output_nodes, l2_weight_lambda,
                  l2_bias_lambda):
+        if cost_function_type == 0:
+            self.cost_function_object = LossCategoricalCrossEntropy()
+            activation_layer_types[-1] = 2
+
         assert number_of_dense_layers == len(activation_layer_types)
         dense_layer_dimensions = [number_of_input_features] + lengths_for_each_dense_layer + \
                                  [number_of_output_nodes]
@@ -459,6 +541,7 @@ class ClassificationNeuralNetwork:
         self.dense_layer_objects = []
         for index in range(len(dense_layer_dimensions)):
             try:
+                print(dense_layer_dimensions[index], dense_layer_dimensions[index+1])
                 self.dense_layer_objects.append(DenseLayer(dense_layer_dimensions[index],
                                                       dense_layer_dimensions[index+1],
                                                            l2_weight_lambda=self.l2_weight_lambda,
@@ -474,10 +557,12 @@ class ClassificationNeuralNetwork:
                 self.activation_layer_objects.append(ActivationSigmoid())
             elif val == 2:
                 self.activation_layer_objects.append(ActivationSoftmax())
+
+        print(len(self.dense_layer_objects))
+        print(len(self.activation_layer_objects))
+
         assert len(self.activation_layer_objects) == len(self.dense_layer_objects)
-        self.cost_function_object = None
-        if cost_function_type == 0:
-            self.cost_function_object = LossCategoricalCrossEntropy()
+        self.optimizer = None
 
     def forward_pass(self, network_inputs, correct_outputs):
         self.dense_layer_objects[0].forward(network_inputs)
@@ -496,7 +581,7 @@ class ClassificationNeuralNetwork:
         self.error = self.cost_function_object.error + regularization_error
 
         predictions = np.argmax(self.activation_layer_objects[-1].output, axis=1)
-        self.accuracy = np.mean(predictions==correct_outputs)
+        self.accuracy = np.mean(predictions == correct_outputs)
 
         self.network_output = current_output
 
@@ -515,10 +600,10 @@ class ClassificationNeuralNetwork:
 
 
 class Model:
-    def __init__(self, number_of_layers, neuron_range, training_data, training_labels, validation_data,
-                 validation_labels, testing_data, testing_labels, number_of_outputs_nodes,
+    def __init__(self, number_of_layers, neuron_range, activation_range, training_data, training_labels,
+                 validation_data, validation_labels, testing_data, testing_labels, number_of_outputs_nodes,
                  number_of_network_architectures, number_of_network_instances, momentum_range, rho_range,
-                 learning_rate_range, l2_weight_lambda, l2_bias_lambda):
+                 learning_rate_range, l2_weight_lambda, l2_bias_lambda, decay_range):
         self.number_of_layers = number_of_layers
         self.neuron_range = neuron_range  # The range of the number of neurons per layer
         self.training_data = training_data
@@ -537,12 +622,16 @@ class Model:
         self.learning_rate_range = learning_rate_range
         self.l2_weight_lambda = l2_weight_lambda
         self.l2_bias_lambda = l2_bias_lambda
+        self.decay_range = decay_range
+        self.activation_range = activation_range
+        self.best_network = None
 
     def train(self):
         for val in range(self.number_of_network_architectures):  # Trying multiple network architectures
             layer_lengths = list(np.random.randint(self.neuron_range[0], self.neuron_range[1],
-                                                   self.number_of_layers-1))  # The last dense layer is output
-            activation_layer_types = list(np.random.randint(0, 2, self.number_of_layers))
+                                                   self.number_of_layers))  # The last dense layer is output
+            activation_layer_types = list(np.random.randint(self.activation_range[0],
+                                                            self.activation_range[1], self.number_of_layers))
             cost_function_type = 0  # For CE
             number_of_output_nodes = self.number_of_output_nodes
             number_of_input_features = self.training_data.shape[1]
@@ -560,23 +649,36 @@ class Model:
                     self.optimizer_objects.append(OptimizerSGDWithMomentum(
                         momentum=np.random.uniform(self.momentum_range[0], self.momentum_range[1]),
                         learning_rate=np.random.uniform(self.learning_rate_range[0],
-                                                        self.learning_rate_range[1])))
+                                                        self.learning_rate_range[1]),
+                        decay=np.random.uniform(self.decay_range[0], self.decay_range[1])))
 
                 elif i % 3 == 1:
                     self.optimizer_objects.append(OptimizerAdaGrad(
                         learning_rate=np.random.uniform(self.learning_rate_range[0],
-                                                        self.learning_rate_range[1])))
+                                                        self.learning_rate_range[1]),
+                        decay=np.random.uniform(self.decay_range[0], self.decay_range[1])))
                 elif i % 3 == 2:
                     self.optimizer_objects.append(OptimizerRMSProp(rho=np.random.uniform(self.rho_range[0],
-                                                                                         self.rho_range[1])))
+                                                                                         self.rho_range[1]),
+                        decay=np.random.uniform(self.decay_range[0], self.decay_range[1])))
+
             print('number of networks: ', len(self.neural_networks))
             print('number of optimizers: ', len(self.optimizer_objects))
+
         # Time to train!
         counter = 1
         for neural_network, optimizer in zip(self.neural_networks, self.optimizer_objects):
+            neural_network.optimizer = optimizer
             print('Network: ', counter)
+            for layer in neural_network.activation_layer_objects:
+                print(type(layer))
 
+            last_1000_epoch_accuracies = []
+            should_break = False
             for epoch in range(10001):
+                if should_break:
+                    print('STUCK IN A MIN, STOPPING TRAINING')
+                    break
                 neural_network.forward_pass(self.training_data, self.training_labels)
                 neural_network.backward_pass()
                 optimizer.update_parameters(neural_network.dense_layer_objects)
@@ -597,29 +699,97 @@ class Model:
                         if np.amin(layer.biases) < min_bias:
                             min_bias = np.amin(layer.biases)
 
+                    training_accuracy = neural_network.accuracy
+                    training_error = neural_network.error
+
+                    neural_network.forward_pass(self.validation_data, self.validation_labels)
+                    validation_accuracy = neural_network.accuracy
+                    neural_network.validation_accuracy = validation_accuracy
                     print(f'epoch: {epoch}, ' +
-                          f'acc: {neural_network.accuracy:.3f}, ' +
-                          f'loss: {neural_network.error:.3f}, ' +
-                          f'lr: {optimizer.current_learning_rate}' +
-                          f'weight range: {(min_weight, max_weight)}' +
+                          f'acc: {training_accuracy:.3f}, ' +
+                          f'validation acc: {validation_accuracy:.3f},  ' +
+                          f'loss: {training_error:.3f}, ' +
+                          f'lr: {optimizer.current_learning_rate}  ' +
+                          f'weight range: {(min_weight, max_weight)}  ' +
                           f'bias range: {(min_bias, max_bias)}')
+
+                    rounded_accuracy = round(neural_network.accuracy, 3)
+                    if len(last_1000_epoch_accuracies) < 10:
+                        last_1000_epoch_accuracies.append(rounded_accuracy)
+                    if len(last_1000_epoch_accuracies) == 10:
+                        if last_1000_epoch_accuracies.count(rounded_accuracy) == len(last_1000_epoch_accuracies):
+                            should_break = True
+                        else:
+                            last_1000_epoch_accuracies.pop(0)
+                            last_1000_epoch_accuracies.append(rounded_accuracy)
 
             counter += 1
 
-    def test(self):
-        best_network = sorted(self.neural_networks, key=lambda network: network.accuracy)[0]
-        print(sorted(self.neural_networks, key=lambda network: network.accuracy))
+    def validate(self, num_of_dense_layers, activation_function_types, num_of_outputs,
+                 layer_lengths, optimizer_object, cost_function_type, l2_weight_lambda, l2_bias_lambda):
 
-        best_network.forward_pass(self.testing_data, self.testing_labels)
+        neural_network = ClassificationNeuralNetwork(number_of_input_features=self.validation_data.shape[1],
+                                                     number_of_dense_layers=num_of_dense_layers,
+                                                     lengths_for_each_dense_layer=layer_lengths,
+                                                     activation_layer_types=activation_function_types,
+                                                     cost_function_type=cost_function_type,
+                                                     number_of_output_nodes=num_of_outputs,
+                                                     l2_weight_lambda=l2_weight_lambda,
+                                                     l2_bias_lambda=l2_bias_lambda)
+
+        for epoch in range(10001):
+            neural_network.forward_pass(self.training_data, self.training_labels)
+            neural_network.backward_pass()
+            optimizer_object.update_parameters(neural_network.dense_layer_objects)
+
+            if epoch % 100 == 0:
+                max_weight = 0
+                min_weight = 0
+                max_bias = 0
+                min_bias = 0
+                for layer in neural_network.dense_layer_objects:
+                    if np.amax(layer.weights) > max_weight:
+                        max_weight = np.amax(layer.weights)
+                    if np.amin(layer.weights) < min_weight:
+                        min_weight = np.amin(layer.weights)
+
+                    if np.amax(layer.biases) > max_bias:
+                        max_bias = np.amax(layer.biases)
+                    if np.amin(layer.biases) < min_bias:
+                        min_bias = np.amin(layer.biases)
+
+                training_accuracy = neural_network.accuracy
+                training_error = neural_network.error
+
+                neural_network.forward_pass(self.testing_data, self.testing_labels)
+                testing_accuracy = neural_network.accuracy
+
+                neural_network.forward_pass(self.validation_data, self.validation_labels)
+                validation_accuracy = neural_network.accuracy
+
+                print(f'epoch: {epoch}, ' +
+                      f'acc: {training_accuracy:.3f}, ' +
+                      f'validation acc: {validation_accuracy:.3f},  ' +
+                      f'testing acc: {testing_accuracy:.3f},  ' +
+                      f'loss: {training_error:.3f}, ' +
+                      f'lr: {optimizer_object.current_learning_rate}  ' +
+                      f'weight range: {(min_weight, max_weight)}  ' +
+                      f'bias range: {(min_bias, max_bias)}')
+
+    def test(self):
+        self.best_network = sorted(self.neural_networks, key=lambda network: network.validation_accuracy)[-1]
+        print([net.accuracy for net in sorted(self.neural_networks, key=lambda network: network.validation_accuracy)])
+
+        self.best_network.forward_pass(self.testing_data, self.testing_labels)
         print()
         print()
-        print(f'The best network had an accuracy of {best_network.accuracy} and loss of {best_network.error}')
+        print(f'The best network had a test accuracy of {self.best_network.accuracy} and loss of {self.best_network.error}')
         print()
         print('The following is a loop through of all of the layers in this '
-              'network, providing its size and the weights and biases')
-        for layer in best_network.dense_layer_objects:
-            print('Number of inputs: ', layer.inputs.size[1])
-            print('Number of outputs: ', layer.outputs.size[1])
+              'network, providing its size, weights, and biases')
+        for layer in self.best_network.dense_layer_objects:
+            print('Number of inputs: ', layer.inputs.shape[1])  # Assumes .shape doens't return something like
+            print('Number of outputs: ', layer.output.shape[1])  # (5,). This will error if #inputs/outputs=1
             print()
             print('Weights:')
             print(layer.weights)
@@ -629,105 +799,65 @@ class Model:
             print()
 
 
-data = get_data_from_falldetection_csv()
+
+
+data = get_data_from_acath_csv()
 
 training_data, training_labels = data[0][0], data[0][1]
 validation_data, validation_labels = data[1][0], data[1][1]
 testing_data, testing_labels = data[2][0], data[2][1]
 
-model = Model(number_of_layers=3, neuron_range=(28, 32), training_data=training_data,
+
+model = Model(number_of_layers=3, neuron_range=(20, 25), activation_range=(0, 2), training_data=training_data,
               training_labels=training_labels, validation_data=validation_data,
               validation_labels=validation_labels,
-              testing_data=testing_data, testing_labels=testing_labels, number_of_outputs_nodes=6,
-              number_of_network_architectures=1, number_of_network_instances=3, momentum_range=(0.2, 0.4),
-              rho_range=(0.8, 0.95), learning_rate_range=(0.7, 0.9), l2_weight_lambda=5e-3,
-              l2_bias_lambda=5e-3)
+              testing_data=testing_data, testing_labels=testing_labels, number_of_outputs_nodes=2,
+              number_of_network_architectures=4, number_of_network_instances=4, momentum_range=(0.7, 0.9),
+              rho_range=(0.6, 0.9), learning_rate_range=(0.7, 1), l2_weight_lambda=.00005,
+              l2_bias_lambda=.00005, decay_range=(0.002, 0.04))
 
-model.train()
-model.test()
 
+# model.train() # Output of this showed that the best performer was a NN with 3 layers, activation functions
+# of Relu, Sigmoid, and Softmax, and with 20-25 neurons per layer.
+
+adagrad = OptimizerAdaGrad(learning_rate=1.0, decay=0.01, epsilon=1e-7)
+'''
+rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.01, epsilon=1e-7, rho=0.7)  # acc: 0.742, validation acc: 0.753
+model.validate(num_of_dense_layers=3, activation_function_types=[0, 1, 2], num_of_outputs=2,
+                 layer_lengths=[22, 25], optimizer_object=rms_prop, cost_function_type=0,
+               l2_weight_lambda=.0005, l2_bias_lambda=.0005)
+'''
+'''
+sgd_momentum = OptimizerSGDWithMomentum(learning_rate=1.0, decay=0.001, momentum=0.7)  # acc: 0.763, validation acc: 0.703
+
+model.validate(num_of_dense_layers=3, activation_function_types=[0, 1, 2], num_of_outputs=2,
+                 layer_lengths=[28, 30], optimizer_object=sgd_momentum, cost_function_type=0,
+               l2_weight_lambda=.0005, l2_bias_lambda=.0005)
+'''
 
 '''
-# Create Dense layer with 2 input features and 64 output values
-dense1 = DenseLayer(2, 64)
+rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.01, epsilon=1e-7, rho=0.7)  # acc: 0.740, validation acc: 0.760
 
-
-# Create ReLU activation (to be used with Dense layer):
-activation1 = ActivationReLU()
-
-# Create second Dense layer with 64 input features (as we take output
-# of previous layer here) and 3 output values (output values)
-dense2 = DenseLayer(64, 3)
-
-
-# Create Softmax classifier's combined loss and activation
-activation2 = ActivationSoftmax()
-CE = LossCategoricalCrossEntropy()
-
-# Create optimizer
-my_SGD = OptimizerSGD(learning_rate=1, decay=1e-3, momentum=0.9)
-my_AdaGrad = OptimizerAdaGrad(decay=1e-4)
-their_AdaGrad = Optimizer_Adagrad(decay=1e-4)
-my_RMSProp = OptimizerRMSProp(learning_rate=.02, decay=1e-5, rho=0.999)
-
-# Train in loop
-for epoch in range(10001):
-
-    # Perform a forward pass of our training data through this layer
-    dense1.forward(X)
-
-    # Perform a forward pass through activation function
-    # takes the output of first dense layer here
-    activation1.forward(dense1.output)
-
-    # Perform a forward pass through second Dense layer
-    # takes outputs of activation function of first layer as inputs
-    dense2.forward(activation1.output)
-
-    activation2.forward(dense2.output)
-    # Perform a forward pass through the activation/loss function
-    # takes the output of second dense layer here and returns loss
-    CE.forward(activation2.output, y)
-
-    # Calculate accuracy from output of activation2 and targets
-    # calculate values along first axis
-    predictions = np.argmax(activation2.output, axis=1)
-    accuracy = np.mean(predictions==y)
-    loss = CE.error
-    if not epoch % 100:
-        print(f'epoch: {epoch}, ' +
-              f'acc: {accuracy:.3f}, ' +
-              f'loss: {loss:.3f}, ' +
-              f'lr: {my_RMSProp.current_learning_rate}')
-
-    # Backward pass
-    CE.backward()
-    activation2.backward(CE.d_error__d_inputs)
-    dense2.backward(activation2.d_error__d_inputs)
-    activation1.backward(dense2.d_error__d_inputs)
-    dense1.backward(activation1.d_error__d_inputs)
-
-    # Update parameters
-    my_RMSProp.update_parameters([dense1, dense2])
-
-    #SOFTMAX_BACKPROP_TIME += (activation2_backprop_time_end - activation2_backprop_time_start)
-    #OPTIMIZER_UPDATE_TIME += (optimizer_update_parameters_time_end - optimizer_update_parameters_time_start)
-    #CE_BACKPROP_TIME += (loss_function_backprop_time_end-loss_function_backprop_time_start)
-    #DENSE1_BACKPROP_TIME += (dense1_backprop_time_end - dense1_backprop_time_start)
-    #DENSE2_BACKPROP_TIME += (dense2_backprop_time_end - dense2_backprop_time_start)
-    #RELU_BACKPROP_TIME += (activation1_backprop_time_end - activation1_backprop_time_start)
-
-
-END_TIME = time.time()
-
-print()
-print('TOTAL TIME: ', END_TIME-START_TIME)
-
-print()
-print('SOFTMAX BACKPROP TIME: ', SOFTMAX_BACKPROP_TIME)
-print('OPTIMIZER UPDATE TIME: ', OPTIMIZER_UPDATE_TIME)
-print('CE BACKPROP TIME: ', CE_BACKPROP_TIME)
-print('RELU BACKPROP TIME: ', RELU_BACKPROP_TIME)
-print('DENSE1 BACKPROP TIME: ', DENSE1_BACKPROP_TIME)
-print('DENSE2 BACKPROP TIME: ', DENSE2_BACKPROP_TIME)
+model.validate(num_of_dense_layers=3, activation_function_types=[0, 1, 2], num_of_outputs=2,
+                 layer_lengths=[35, 42], optimizer_object=rms_prop, cost_function_type=0,
+               l2_weight_lambda=.0005, l2_bias_lambda=.0005)
 '''
+
+'''
+rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.01, epsilon=1e-7, rho=0.4)  # acc: 0.736, validation acc: 0.754
+
+model.validate(num_of_dense_layers=3, activation_function_types=[0, 1, 2], num_of_outputs=2,
+                 layer_lengths=[64, 64], optimizer_object=rms_prop, cost_function_type=0,
+               l2_weight_lambda=.0005, l2_bias_lambda=.0005)
+'''
+
+
+
+rms_prop = OptimizerRMSProp(learning_rate=1, decay=0.005, epsilon=1e-7, rho=0.4)  # acc: 0.749, validation acc: 0.756
+
+model.validate(num_of_dense_layers=3, activation_function_types=[0, 0, 2], num_of_outputs=2,
+                 layer_lengths=[64, 64], optimizer_object=rms_prop, cost_function_type=0,
+               l2_weight_lambda=.0005, l2_bias_lambda=.0005)
+
+
+
